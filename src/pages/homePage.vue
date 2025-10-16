@@ -3,7 +3,7 @@
     <q-scroll-area
       style="height: 1000px; 
       max-width: 100%;"
-      class="absolute-full"
+      class="absolute full-width full-height"
     >
     <!-- Tweet Input -->
     <div class="q-py-lg q-px-lg row items-end q-gutter-md">
@@ -51,7 +51,7 @@
         leave-active-class="animated fadeOut"
         >
         <q-item
-        v-for="qweet in qweets" :key="qweet.date"
+        v-for="qweet in qweets" :key="qweet.id"
         class="q-py-md q-px-lg"
         clickable
         v-ripple
@@ -80,7 +80,7 @@
            <div class="qweet-icons row justify-between q-mt-sm">
             <q-btn flat round icon="chat_bubble_outline" size="sm" class="q-mr-md" />
             <q-btn flat round icon="repeat" size="sm" class="q-mr-md" />
-            <q-btn flat round icon="favorite_border" size="sm" class="q-mr-md" />
+            <q-btn flat round :icon="qweet.liked ? 'fas fa-heart': 'far fa-heart'" size="sm" class="q-mr-md" @click="likeQweet(qweet)" />
             <q-btn flat round icon="share" size="sm" class="q-mr-md" />
             <q-btn flat round icon="delete" size="sm" class="q-mr-md" @click="deleteQweet(qweet)" />
            </div>
@@ -95,14 +95,15 @@
 <script>
 import { defineComponent } from 'vue'
 import {formatDistance} from 'date-fns'
+import { db } from "src/boot/firebase";
+import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc  } from "firebase/firestore";
 
 export default defineComponent({
   name: 'PageHome',
   data() {
     return {
       newQweetContent: '',
-      qweets: [
-      ],
+      qweets: [],
     }
   },
   methods: {
@@ -149,18 +150,75 @@ export default defineComponent({
     },
     addNewQweet(){
       if(this.newQweetContent !== ''){
-        this.qweets.unshift({
+        let newQweet = {
           content: this.newQweetContent,
           date: new Date().toISOString(),
-        });
+          liked: false
+        }; 
+        // this.qweets.unshift(newQweet);
+        try {
+          // 1. Önce koleksiyona bir referans oluşturulur
+          const qweetsCollectionRef = collection(db, "qweets");
+          
+          // 2. addDoc fonksiyonu ile döküman eklenir
+          const docRef = addDoc(qweetsCollectionRef, newQweet);
+          
+          console.log("Döküman şu ID ile yazıldı: ", docRef);
+        } catch (error) {
+          console.error("Döküman eklenirken hata oluştu: ", error);
+        }
         this.newQweetContent = '';
-      }
+      } 
     },
     deleteQweet(qweet) {
-      let dateToDelete = qweet.date;
-      let index = this.qweets.findIndex(qweet => qweet.date === dateToDelete);
-      this.qweets.splice(index, 1);
+      // db.collection("qweets").doc(qweet.id).delete().then(() => {
+      //     console.log("Document successfully deleted!");
+      // }).catch((error) => {
+      //     console.error("Error removing document: ", error);
+      // });
+      try {
+        deleteDoc(doc(db, "qweets", qweet.id));
+        console.log("Qweet başarıyla silindi:", qweet.id);
+        
+      } catch (error) {
+        console.error("Hata - Qweet silinemedi:", error);
+      }
+    },
+    likeQweet(qweet) {
+      try {
+        const docRef = doc(db, 'qweets', qweet.id);
+
+        updateDoc(docRef, {
+          liked: !qweet.liked 
+        });
+        console.log("Beğeni durumu güncellendi:", qweet);
+      } catch (error) {
+        console.error("Beğeni durumu güncellenirken hata oluştu: ", error);
+      }
+      // qweet.liked = !qweet.liked 
     }
+  },
+  mounted() {
+    const qweetsCollection = collection(db, "qweets");
+
+     onSnapshot(qweetsCollection, (snapshot) => {
+       snapshot.docChanges().forEach((change) => {
+          let qweetChange = change.doc.data();
+          qweetChange.id = change.doc.id;
+         if (change.type === "added") {
+           this.qweets.unshift({
+             id: change.doc.id,
+             ...change.doc.data()
+           });
+         }else if (change.type === "removed") {
+            let index = this.qweets.findIndex(qweet => qweet.id === qweetChange.id);
+            this.qweets.splice(index, 1);
+         }else if (change.type === "modified") {
+            let index = this.qweets.findIndex(qweet => qweet.id === qweetChange.id);
+            this.qweets[index] = qweetChange;
+         }
+       });
+     });
   },
 })
 </script>
