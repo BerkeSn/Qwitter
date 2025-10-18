@@ -64,25 +64,32 @@
         
         <q-item-section>
           <!-- Name -->
-          <q-item-label class="text-subtitle1">
-            <strong>Ahsoka Tano</strong>
-            <span class="q-px-sm text-grey-7">
-              @skyguy
-              <br class="lt-md"> &bull; {{ relativeDate(qweet.date) }}
-            </span>
-          </q-item-label>
+        <q-item-label class="text-subtitle1">
+          <strong>{{ qweet.author ? qweet.author.fullName : 'Bilinmeyen Kullanıcı' }}</strong>
+          <span class="q-px-sm text-grey-7">
+            @{{ qweet.author ? qweet.author.email.split('@')[0] : '...' }}
+            <br class="lt-md"> &bull; {{ relativeDate(qweet.createdAt) }}
+          </span>
+        </q-item-label>
           <!-- Content -->
           <q-item-label class="qweet_content text-subtitle1">
             {{ qweet.content }}
           </q-item-label>
 
           <!-- Actions -->
-           <div class="qweet-icons row justify-between q-mt-sm">
+           <div class="qweet-icons row justify-between q-mt-sm q-px-xl">
             <q-btn flat round icon="chat_bubble_outline" size="sm" class="q-mr-md" />
             <q-btn flat round icon="repeat" size="sm" class="q-mr-md" />
             <q-btn flat round :icon="qweet.liked ? 'fas fa-heart': 'far fa-heart'" size="sm" class="q-mr-md" @click="likeQweet(qweet)" />
             <q-btn flat round icon="share" size="sm" class="q-mr-md" />
-            <q-btn flat round icon="delete" size="sm" class="q-mr-md" @click="deleteQweet(qweet)" />
+            <q-btn 
+              v-if="auth.currentUser && qweet.authorId === auth.currentUser.uid"
+              flat round 
+              color="grey"
+              icon="delete" 
+              size="sm" 
+              @click="deleteQweet(qweet)" 
+              />
            </div>
         </q-item-section>
         </q-item>
@@ -96,7 +103,8 @@
 import { defineComponent } from 'vue'
 import {formatDistance} from 'date-fns'
 import { db } from "src/boot/firebase";
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc  } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query, orderBy, getDoc, serverTimestamp } from "firebase/firestore";
+import {auth} from "src/boot/firebase";
 
 export default defineComponent({
   name: 'PageHome',
@@ -104,123 +112,89 @@ export default defineComponent({
     return {
       newQweetContent: '',
       qweets: [],
+      isSubmitting: false,
+      auth: auth
     }
   },
   methods: {
     relativeDate(value) {
-      // 1) yoksa hemen döndür
-      if (value === null || value === undefined || value === '') return ''
-
-      // 2) normalize et ve Date üret
-      let date
-      try {
-        if (value instanceof Date) {
-          date = value
-        } else if (typeof value === 'number') {
-          // 10 hane => saniye, 13 hane => ms
-          const s = value.toString().length
-          date = (s === 10) ? new Date(value * 1000) : new Date(value)
-        } else if (typeof value === 'string') {
-          const s = value.trim()
-          if (/^\d+$/.test(s)) {
-            // sadece rakamlardan oluşuyorsa
-            date = (s.length === 10) ? new Date(parseInt(s, 10) * 1000) : new Date(parseInt(s, 10))
-          } else {
-            // "2025-10-04 14:32:00" formu için T kullan (Safari uyumluluğu için)
-            const normalized = (s.includes(' ') && !s.includes('T')) ? s.replace(' ', 'T') : s
-            date = new Date(normalized)
-          }
-        } else {
-          // bilinmeyen tip
-          return ''
-        }
-      } catch (err) {
-        console.warn('relativeDate parse error', err, value)
-        return ''
-      }
-
-      // 3) geçerli tarih mi kontrol et
-      if (!date || isNaN(date.getTime())) {
-        console.warn('Invalid date in relativeDate():', value)
-        return ''
-      }
-
-      // 4) formatla ve döndür
-      return formatDistance(date, new Date(), { addSuffix: true })
+      if (!value) return '';
+      // Firebase Timestamp objesini JavaScript Date objesine çevir
+      const date = value.toDate();
+      return formatDistance(date, new Date(), { addSuffix: true });
     },
-    addNewQweet(){
-      if(this.newQweetContent !== ''){
-        let newQweet = {
-          content: this.newQweetContent,
-          date: new Date().toISOString(),
-          liked: false
-        }; 
-        // this.qweets.unshift(newQweet);
+    async addNewQweet(){// DÜZELTME:
+        const self = this;
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          self.$q.notify({ color: 'negative', message: 'Tweet atmak için giriş yapmalısınız.' });
+          return;
+        }
+
+        self.isSubmitting = true;
+
         try {
-          // 1. Önce koleksiyona bir referans oluşturulur
-          const qweetsCollectionRef = collection(db, "qweets");
-          
-          // 2. addDoc fonksiyonu ile döküman eklenir
-          const docRef = addDoc(qweetsCollectionRef, newQweet);
-          
-          console.log("Döküman şu ID ile yazıldı: ", docRef);
-        } catch (error) {
-          console.error("Döküman eklenirken hata oluştu: ", error);
-        }
-        this.newQweetContent = '';
-      } 
-    },
-    deleteQweet(qweet) {
-      // db.collection("qweets").doc(qweet.id).delete().then(() => {
-      //     console.log("Document successfully deleted!");
-      // }).catch((error) => {
-      //     console.error("Error removing document: ", error);
-      // });
-      try {
-        deleteDoc(doc(db, "qweets", qweet.id));
-        console.log("Qweet başarıyla silindi:", qweet.id);
-        
-      } catch (error) {
-        console.error("Hata - Qweet silinemedi:", error);
-      }
-    },
-    likeQweet(qweet) {
-      try {
-        const docRef = doc(db, 'qweets', qweet.id);
+          const newQweet = {
+            content: self.newQweetContent,
+            createdAt: serverTimestamp(), // Doğru ve güvenilir tarih yöntemi
+            authorId: currentUser.uid // Tweet'i kullanıcıya bağlayan kimlik
+          };
 
-        updateDoc(docRef, {
-          liked: !qweet.liked 
-        });
-        console.log("Beğeni durumu güncellendi:", qweet);
-      } catch (error) {
-        console.error("Beğeni durumu güncellenirken hata oluştu: ", error);
-      }
-      // qweet.liked = !qweet.liked 
+          await addDoc(collection(db, "qweets"), newQweet);
+          
+          self.newQweetContent = '';
+          self.$q.notify({ color: 'positive', message: 'Tweet başarıyla gönderildi!' });
+
+        } catch (error) {
+          console.error("Tweet gönderirken hata oluştu: ", error);
+          self.$q.notify({ color: 'negative', message: 'Tweet gönderilirken bir hata oluştu.' });
+        } finally {
+          self.isSubmitting = false; // İşlem bitince butonu tekrar aktif et
+        }
+    },
+    async deleteQweet(qweet) {
+        try {
+          await deleteDoc(doc(db, "qweets", qweet.id));
+          this.$q.notify({ color: 'positive', message: 'Tweet silindi.' });
+        } catch (error) {
+          console.error("Hata - Qweet silinemedi:", error);
+          this.$q.notify({ color: 'negative', message: 'Tweet silinirken bir hata oluştu.' });
+        }
+    },
+    async likeQweet(qweet) {
+        try {
+          const docRef = doc(db, 'qweets', qweet.id);
+          await updateDoc(docRef, {
+            liked: !qweet.liked 
+          });
+        } catch (error) {
+          console.error("Beğeni durumu güncellenirken hata oluştu: ", error);
+        }
     }
   },
   
-  mounted() {
-    const qweetsCollection = collection(db, "qweets");
+mounted() {
+  const qweetsQuery = query(collection(db, "qweets"), orderBy("createdAt", "desc"));
 
-     onSnapshot(qweetsCollection, (snapshot) => {
-       snapshot.docChanges().forEach((change) => {
-          let qweetChange = change.doc.data();
-          qweetChange.id = change.doc.id;
-         if (change.type === "added") {
-           this.qweets.unshift({
-             id: change.doc.id,
-             ...change.doc.data()
-           });
-         }else if (change.type === "removed") {
-            let index = this.qweets.findIndex(qweet => qweet.id === qweetChange.id);
-            this.qweets.splice(index, 1);
-         }else if (change.type === "modified") {
-            let index = this.qweets.findIndex(qweet => qweet.id === qweetChange.id);
-            this.qweets[index] = qweetChange;
-         }
-       });
-     });
-  },
+  onSnapshot(qweetsQuery, async (snapshot) => {
+    let fetchedQweets = [];
+    for (const qweetDoc of snapshot.docs) {
+      let qweetData = { id: qweetDoc.id, ...qweetDoc.data() };
+
+      // Tweet'in yazarının bilgilerini 'users' koleksiyonundan çekiyoruz
+      if (qweetData.authorId) {
+        const userDocRef = doc(db, "users", qweetData.authorId);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          // Yazar bilgisini de tweet objesine ekliyoruz
+          qweetData.author = userDoc.data();
+        }
+      }
+      fetchedQweets.push(qweetData);
+    }
+    this.qweets = fetchedQweets;
+    });
+  }
 })
 </script>
 
