@@ -19,13 +19,15 @@
 
       </q-toolbar>
     </q-header>
-      
+      <!-- Left drawer-->
     <q-drawer 
       show-if-above
       v-model="leftDrawerOpen"
       side="left"
       bordered
+      heigth="100%"
       width="283"
+      class= "column"
       
     >
     <!-- Left Drawer -->
@@ -35,8 +37,7 @@
         size = "lg"
         color="primary"
        />
-
-       <q-list>
+       
         <!-- Home Item -->
         <q-item 
           clickable 
@@ -64,10 +65,38 @@
 
           <q-item-section class="text-h6 text-weight-bold">About</q-item-section>
         </q-item>
-      </q-list>      
+
+        <!-- Profile -->
+        <q-item 
+          clickable 
+          v-ripple
+          exact
+          to="/profile"
+        >
+          <q-item-section avatar>
+            <q-icon  name="account_circle" size="md"/>
+          </q-item-section>
+
+          <q-item-section class="text-h6 text-weight-bold">Profile</q-item-section>
+        </q-item>
+
+        <!-- Login / Sign Up Item -->
+        <q-item 
+            clickable 
+            v-ripple
+            exact
+            style="margin-top: auto; margin-bottom: 1rem;"
+            to="/login"
+          >
+            <q-item-section avatar>
+              <q-icon  name="login" size="md"/>
+            </q-item-section>
+            <q-item-section class="text-h6 text-weight-bold">Login / Sign Up</q-item-section>
+        </q-item>
        
     </q-drawer>
 
+    <!-- Right drawer-->
     <q-drawer
       show-if-above
       v-model="rightDrawerOpen"

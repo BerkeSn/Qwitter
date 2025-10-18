@@ -198,6 +198,7 @@ export default defineComponent({
       // qweet.liked = !qweet.liked 
     }
   },
+  
   mounted() {
     const qweetsCollection = collection(db, "qweets");
 
