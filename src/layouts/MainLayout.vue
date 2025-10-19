@@ -67,32 +67,37 @@
         </q-item>
 
         <!-- Profile -->
-        <q-item 
-          clickable 
-          v-ripple
-          exact
-          to="/profile"
-        >
-          <q-item-section avatar>
-            <q-icon  name="account_circle" size="md"/>
-          </q-item-section>
-
-          <q-item-section class="text-h6 text-weight-bold">Profile</q-item-section>
-        </q-item>
-
-        <!-- Login / Sign Up Item -->
-        <q-item 
+         <template v-if="user">
+            <q-item 
             clickable 
             v-ripple
             exact
             style="margin-top: auto; margin-bottom: 1rem;"
-            to="/login"
+            to="/profile"
           >
             <q-item-section avatar>
-              <q-icon  name="login" size="md"/>
+              <q-icon  name="account_circle" size="md"/>
             </q-item-section>
-            <q-item-section class="text-h6 text-weight-bold">Login / Sign Up</q-item-section>
-        </q-item>
+
+            <q-item-section class="text-h6 text-weight-bold">Profile</q-item-section>
+          </q-item>
+         </template>
+
+         <template v-else>
+            <!-- Login / Sign Up Item -->
+            <q-item 
+                clickable 
+                v-ripple
+                exact
+                style="margin-top: auto; margin-bottom: 1rem;"
+                to="/login"
+              >
+                <q-item-section avatar>
+                  <q-icon  name="login" size="md"/>
+                </q-item-section>
+                <q-item-section class="text-h6 text-weight-bold">Login / Sign Up</q-item-section>
+            </q-item>
+         </template>
        
     </q-drawer>
 
@@ -104,7 +109,6 @@
       bordered
       width="500"
       >
-      <!-- Right drawe -->
       <q-input
         class="q-ma-md"
         outlined
@@ -170,24 +174,56 @@
 </template>
 
 <script>
-import { ref } from 'vue'
+// 'ref', 'onMounted', 'useRouter' gibi 'setup'a özel importlara artık gerek yok.
+import { auth } from 'boot/firebase'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
 
 export default {
-  setup () {
-    const leftDrawerOpen = ref(false)
-    const rightDrawerOpen = ref(false)
+  name: 'MainLayout',
 
+  // Reaktif veriler 'data' fonksiyonu içinde tanımlanır.
+  data() {
     return {
-      leftDrawerOpen,
-      toggleLeftDrawer () {
-        leftDrawerOpen.value = !leftDrawerOpen.value
-      },
+      leftDrawerOpen: false,
+      rightDrawerOpen: false,
+      user: null // Kullanıcı durumunu tutacak değişken
+    }
+  },
 
-      rightDrawerOpen,
-      toggleRightDrawer () {
-        rightDrawerOpen.value = !rightDrawerOpen.value
+  // Butonlara tıklandığında veya başka bir yerden çağrılacak fonksiyonlar 'methods' içine yazılır.
+  methods: {
+    toggleLeftDrawer () {
+      this.leftDrawerOpen = !this.leftDrawerOpen
+    },
+    toggleRightDrawer () {
+      this.rightDrawerOpen = !this.rightDrawerOpen
+    },
+    async handleLogout () {
+      try {
+        await signOut(auth)
+        // Options API'de router'a 'this.$router' ile erişilir.
+        this.$router.push('/login')
+      } catch (error) {
+        console.error('Çıkış yaparken hata:', error)
       }
     }
+  },
+
+  // 'onMounted' yerine, component ekrana yerleştiğinde çalışan 'mounted' hook'unu kullanırız.
+  mounted() {
+    // onAuthStateChanged, kullanıcı durumunu dinler.
+    // Arrow function (=>) kullandığımız için 'this' bağlamı korunur ve
+    // 'data' içindeki 'this.user' değişkenine erişebiliriz.
+    onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // Kullanıcı giriş yapmışsa, 'user' değişkenini doldur.
+        this.user = firebaseUser
+        console.log(firebaseUser.displayName)
+      } else {
+        // Kullanıcı giriş yapmamışsa, 'user' değişkenini boşalt.
+        this.user = null
+      }
+    })
   }
 }
 </script>

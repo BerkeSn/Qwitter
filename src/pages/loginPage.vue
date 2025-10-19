@@ -80,6 +80,9 @@
 </template>
 
 <script>
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "boot/firebase";
+
 export default {
   // Bileşene bir isim vermek iyi bir pratiktir
   name: 'LoginPage',
@@ -88,32 +91,36 @@ export default {
   data() {
     return {
       email: '',
-      password: ''
+      password: '',
+      isSubmitting: false
     }
   },
-
   
   methods: {
-    handleLogin() {
-      
-      if (this.email && this.password) {
-        console.log('Email:', this.email)
-        console.log('Password:', this.password)
+    async handleLogin() {
+      const self = this;
+      self.isSubmitting = true; // Butonu kilitlemek için (isteğe bağlı)
 
+      try {
+        // Firebase'in giriş yapma fonksiyonunu çağır
+        await signInWithEmailAndPassword(auth, self.email, self.password);
+        
+        // Bildirim gösterme
+        self.$q.notify({ color: 'positive', message: 'Giriş başarılı!' });
+        
+        // Ana sayfaya yönlendir
+        self.$router.push('/');
 
-        this.$q.notify({
-          color: 'positive',
-          icon: 'check_circle',
-          message: 'Başarıyla giriş yapıldı!',
-        })
-
-        this.$router.push('/')
-      } else {
-        this.$q.notify({
-          color: 'negative',
-          icon: 'warning',
-          message: 'Lütfen tüm alanları doldur',
-        })
+      } catch (error) {
+        console.error("Giriş hatası:", error);
+        // Firebase'den gelen hata koduna göre kullanıcıya özel mesajlar gösterebiliriz
+        let message = 'Giriş sırasında bir hata oluştu.';
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+          message = 'E-posta veya şifre hatalı.';
+        }
+        self.$q.notify({ color: 'negative', message: message });
+      } finally {
+        self.isSubmitting = false; // Butonu tekrar aç
       }
     }
   }

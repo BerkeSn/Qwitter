@@ -2,7 +2,9 @@
   <q-page class="bg-grey-2">
     <q-scroll-area class="absolute full-width full-height">
 
-      <q-card class="q-ma-md relative-position">
+      <q-card 
+        v-if="userProfile"
+        class="q-ma-md relative-position">
         
         <q-img
           src="https://picsum.photos/1000/300"
@@ -29,12 +31,21 @@
               rounded
               outline
               no-caps
+              @click="settings()"
+            />
+            <q-btn
+              label="Çıkış Yap"
+              color="negative"
+              rounded
+              outline
+              no-caps
+              @click="signout()"
             />
           </div>
 
           <div class="q-mt-md">
-            <div class="text-h6 text-weight-bold">Berke SN</div>
-            <div class="text-subtitle2 text-grey-8">@berke_sn</div>
+            <div class="text-h6 text-weight-bold">{{ userProfile.fullName }}</div>
+            <div class="text-subtitle2 text-grey-8">@{{ userProfile.email.split('@')[0] }}</div>
             <div class="q-pt-sm">
               Bu bir kullanıcı açıklamasıdır. Quasar ve Vue.js ile harika şeyler yapıyorum. #Vue #Quasar
             </div>
@@ -63,9 +74,9 @@
         <q-item-section>
           <!-- Name -->
           <q-item-label class="text-subtitle1">
-            <strong>Ahsoka Tano</strong>
+            <strong>{{ userProfile.fullName }}</strong>
             <span class="q-px-sm text-grey-7">
-              @skyguy
+              @{{ userProfile.email.split('@')[0] }}
               <br class="lt-md"> &bull; {{ relativeDate(qweet.date) }}
             </span>
           </q-item-label>
@@ -91,52 +102,89 @@
   </q-page>
 </template>
 
-// ProfilePage.vue
-
 <script>
-// Gerekli Firebase fonksiyonlarını import ediyoruz
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { auth, db } from "boot/firebase";
+import { formatDistance } from 'date-fns'
 
 export default {
   name: 'ProfilePage',
   data() {
     return {
       userProfile: null,
-      loading: true
+      loading: true,
+      qweets: []
+    }
+  },
+
+  methods:{
+    async signout () {
+        try {
+            await signOut(auth)
+            this.$router.push('/')
+
+            this.$q.notify({
+                color: 'positive',
+                icon: 'check_circle',
+                message: 'Başarıyla çıkış yapıldı!',
+            })
+
+        } catch (error) {
+            console.error('Çıkış yaparken hata:', error)
+            this.$q.notify({
+                color: 'negative',
+                icon: 'check_circle',
+                message: 'Başarıyla çıkış yapıldı!',
+            })
+        }
+    },
+    relativeDate(value) {
+      if (!value) return '';
+      const date = value.toDate();
+      return formatDistance(date, new Date(), { addSuffix: true });
     }
   },
 
   mounted() {
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
+    if (user) { // Evet, var. Kimlik kartı (UID) elimizde: user.uid
+
+      // 1. ADIM: Veritabanında doğru dosyayı hedef alıyoruz.
+      // "users" koleksiyonuna git ve kimlik kartı 'user.uid' olan belgeye bir referans oluştur.
+      const userDocRef = doc(db, "users", user.uid);
       
-      if (user) {
-        const userDocRef = doc(db, "users", user.uid);
-        
-        getDoc(userDocRef).then(docSnap => {
-          
-          if (docSnap.exists()) {
-            
-            this.userProfile = docSnap.data();
-            console.log("Kullanıcı verisi:", this.userProfile);
-          } else {
-            console.log("Kullanıcı için veritabanında bir belge bulunamadı!");
-          }
-        }).catch(error => {
-          console.error("Veri çekerken hata:", error);
-        }).finally(() => {
-          
-          this.loading = false;
-        });
-        
-      } else {
-        
-        console.log("Giriş yapmış kullanıcı yok.");
-        this.loading = false;
+      // 2. ADIM: Hedefteki dosyayı getirmesini istiyoruz.
+      // Bu referansı kullanarak veritabanından o belgeyi getirmesini söylüyoruz ('await' ile bekliyoruz).
+      const docSnap = await getDoc(userDocRef);
+
+      // 3. ADIM: Gelen veriyi işliyoruz.
+      // Eğer belge bulunduysa...
+      if (docSnap.exists()) {
+        // ...içindeki verileri ('fullName', 'email' vb.) alıp 'userProfile' değişkenine atıyoruz.
+        this.userProfile = docSnap.data();
+      }else{
         this.$router.push('/login');
+        return
       }
-    });
+
+      const qweetsQuery = query(
+          collection(db, "qweets"), 
+          where("authorId", "==", user.uid),
+          orderBy("createdAt", "desc")
+        );
+      
+        onSnapshot(qweetsQuery, (snapshot) => {
+          this.qweets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        });
+        this.loading = false;
+
+    } else {
+      // Giriş yapan yoksa, login'e yönlendir.
+      this.loading = false;
+      this.$router.push('/login');
+    }
+  });
   }
 }
 </script>

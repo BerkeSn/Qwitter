@@ -4,7 +4,12 @@ import { getFirestore } from "firebase/firestore";
 
 
 const firebaseConfig = {
-
+  apiKey: "AIzaSyC_gXUlPL9N11_nnDYkFt0XQfil0HYlxTk",
+  authDomain: "qweets-7284d.firebaseapp.com",
+  projectId: "qweets-7284d",
+  storageBucket: "qweets-7284d.firebasestorage.app",
+  messagingSenderId: "545701880551",
+  appId: "1:545701880551:web:8389e6f2c6b56acb92f842"
 };
 
 // let app = initializeApp(firebaseConfig);
